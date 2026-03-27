@@ -1,0 +1,19 @@
+# Packet captures (too large for git, keep locally)
+*.pcap
+*.pcapng
+*.pcapng.gz
+
+# Script outputs
+*.csv
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
