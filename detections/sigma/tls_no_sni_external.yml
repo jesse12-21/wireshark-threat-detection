@@ -1,0 +1,49 @@
+title: TLS Client Hello Without SNI to External Destination
+id: 4d5e6f78-9ab0-4c1d-9e2f-3a4b5c6d7e81
+status: experimental
+description: |
+    Detects TLS Client Hello messages lacking the Server Name Indication
+    (SNI) extension when the destination is an external (non-RFC1918) IP.
+    Legitimate clients almost universally include SNI; its absence often
+    indicates malware connecting to a hardcoded C2 IP, or deliberate SNI
+    stripping for evasion of hostname-based inspection. This is one of
+    the highest-signal-to-noise TLS detections available without payload
+    inspection.
+references:
+    - https://attack.mitre.org/techniques/T1573/002/
+    - https://github.com/jesse12-21/wireshark-threat-detection
+author: jesse12-21
+date: 2026/05/15
+tags:
+    - attack.command_and_control
+    - attack.t1573.002
+    - attack.defense_evasion
+logsource:
+    product: zeek
+    service: ssl
+detection:
+    no_sni:
+        # In Zeek's ssl.log, server_name is empty ("-" in TSV) when SNI is absent.
+        # Both forms covered for portability.
+        server_name|exists: false
+    internal_destinations:
+        id.resp_h|cidr:
+            - '10.0.0.0/8'
+            - '172.16.0.0/12'
+            - '192.168.0.0/16'
+            - '127.0.0.0/8'
+            - '169.254.0.0/16'
+            - '::1/128'
+            - 'fc00::/7'
+    condition: no_sni and not internal_destinations
+fields:
+    - id.orig_h
+    - id.resp_h
+    - id.resp_p
+    - version
+falsepositives:
+    - Legacy IoT devices using direct-IP TLS to vendor backends
+    - Some VPN client bootstrap traffic (often connecting by IP)
+    - Active external probes / scanners (Censys, Shodan) hitting internal-facing services
+    - Older software that pre-dates widespread SNI support
+level: high

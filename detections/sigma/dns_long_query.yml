@@ -1,0 +1,46 @@
+title: DNS Tunneling - Anomalously Long Query Name
+id: f1a2b3c4-d5e6-4f78-9a0b-1c2d3e4f5061
+status: experimental
+description: |
+    Detects DNS queries with names longer than 50 characters — a primary
+    indicator of DNS tunneling, where data is encoded into subdomain labels
+    for covert exfiltration or command-and-control communication. Open-source
+    tools that produce this pattern include iodine and dnscat2.
+references:
+    - https://attack.mitre.org/techniques/T1071/004/
+    - https://attack.mitre.org/techniques/T1048/003/
+    - https://github.com/jesse12-21/wireshark-threat-detection
+author: jesse12-21
+date: 2026/05/15
+tags:
+    - attack.command_and_control
+    - attack.t1071.004
+    - attack.exfiltration
+    - attack.t1048.003
+logsource:
+    product: zeek
+    service: dns
+detection:
+    selection:
+        # Matches DNS query names of 51+ characters. Regex used for
+        # portability — some Sigma backends do not yet implement the
+        # `|length` value modifier.
+        query|re: '^.{51,}$'
+    filter_internal:
+        # Exclude common legitimate long-name patterns
+        query|endswith:
+            - '.local'
+            - '.corp'
+            - '.internal'
+            - '.in-addr.arpa'
+            - '.ip6.arpa'
+    condition: selection and not filter_internal
+fields:
+    - id.orig_h
+    - query
+    - qtype_name
+falsepositives:
+    - CDN-related queries with long object paths in the subdomain (e.g., some S3 access patterns)
+    - DKIM / DMARC record lookups for large organizations
+    - Anti-tracking browser features that prepend long random subdomains
+level: medium

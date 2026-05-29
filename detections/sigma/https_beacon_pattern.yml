@@ -1,0 +1,78 @@
+title: Outbound HTTPS Connection to External Destination (Atomic)
+id: 5e6f789a-b0c1-4d2e-9f3a-4b5c6d7e8f91
+status: experimental
+description: |
+    Atomic rule matching outbound HTTPS (TCP/443) connections to external
+    destinations. Used as input for the correlation rule below that
+    detects repeated connections to a single destination indicative of
+    C2 beaconing.
+references:
+    - https://attack.mitre.org/techniques/T1071/001/
+author: jesse12-21
+date: 2026/05/15
+tags:
+    - attack.command_and_control
+    - attack.t1071.001
+logsource:
+    product: zeek
+    service: conn
+detection:
+    selection:
+        id.resp_p: 443
+        proto: 'tcp'
+    internal_destinations:
+        id.resp_h|cidr:
+            - '10.0.0.0/8'
+            - '172.16.0.0/12'
+            - '192.168.0.0/16'
+            - '127.0.0.0/8'
+            - 'fc00::/7'
+    condition: selection and not internal_destinations
+fields:
+    - id.orig_h
+    - id.resp_h
+level: informational
+---
+title: HTTPS Beaconing - Repeated Connections to Single External Destination
+id: 6f789ab0-c1d2-4e3f-9a4b-5c6d7e8f9a01
+status: experimental
+description: |
+    Detects a high count of outbound HTTPS connections from a single
+    source to a single external destination within a short window —
+    consistent with C2 beaconing behavior.
+
+    Note: this rule detects high-frequency connections but does not
+    compute interval regularity (jitter). For true low-jitter beacon
+    detection, supplement with statistical analysis via the
+    `beacon_detect.sh` script in the companion project. The two layers
+    work well together: this Sigma rule fires the initial alert from
+    SIEM logs; the script performs the deeper investigation against
+    the raw PCAP.
+references:
+    - https://attack.mitre.org/techniques/T1071/001/
+    - https://attack.mitre.org/techniques/T1029/
+    - https://github.com/jesse12-21/wireshark-threat-detection
+author: jesse12-21
+date: 2026/05/15
+tags:
+    - attack.command_and_control
+    - attack.t1071.001
+    - attack.exfiltration
+    - attack.t1029
+correlation:
+    type: event_count
+    rules:
+        - 5e6f789a-b0c1-4d2e-9f3a-4b5c6d7e8f91
+    group-by:
+        - id.orig_h
+        - id.resp_h
+    timespan: 10m
+    condition:
+        gte: 15
+falsepositives:
+    - Browsers maintaining persistent connections to a CDN edge
+    - Websocket clients that reconnect on drop
+    - Software auto-updaters and telemetry agents
+    - Anti-virus / EDR cloud-lookup chatter
+    - Mobile-app push-notification keepalives
+level: high

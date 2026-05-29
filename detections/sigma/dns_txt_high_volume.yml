@@ -1,0 +1,62 @@
+title: DNS TXT Record Query (Atomic)
+id: 2b3c4d5e-6f78-49a0-b1c2-d3e4f5a6b7c1
+status: experimental
+description: |
+    Atomic rule matching individual DNS TXT record queries. Used as
+    the input for the correlation rule below that detects high-volume
+    TXT exfiltration. TXT records can carry up to 255 characters per
+    string and multiple strings per record, making them a preferred
+    carrier for DNS tunneling.
+references:
+    - https://attack.mitre.org/techniques/T1071/004/
+author: jesse12-21
+date: 2026/05/15
+tags:
+    - attack.command_and_control
+    - attack.t1071.004
+logsource:
+    product: zeek
+    service: dns
+detection:
+    selection:
+        qtype_name: 'TXT'
+    condition: selection
+fields:
+    - id.orig_h
+    - query
+level: informational
+---
+title: DNS Tunneling - High Volume TXT Queries from Single Source
+id: 3c4d5e6f-789a-4b0c-9d1e-2f3a4b5c6d71
+status: experimental
+description: |
+    Detects a high volume of DNS TXT record queries from a single source
+    within a short time window — strongly consistent with active DNS
+    tunneling using TXT records as a payload carrier. Threshold of 30
+    TXT queries in 5 minutes is well above any typical workstation
+    baseline; tune downward for security-monitoring hosts.
+references:
+    - https://attack.mitre.org/techniques/T1071/004/
+    - https://attack.mitre.org/techniques/T1048/003/
+    - https://github.com/jesse12-21/wireshark-threat-detection
+author: jesse12-21
+date: 2026/05/15
+tags:
+    - attack.command_and_control
+    - attack.t1071.004
+    - attack.exfiltration
+    - attack.t1048.003
+correlation:
+    type: event_count
+    rules:
+        - 2b3c4d5e-6f78-49a0-b1c2-d3e4f5a6b7c1
+    group-by:
+        - id.orig_h
+    timespan: 5m
+    condition:
+        gte: 30
+falsepositives:
+    - Mail servers performing extensive DKIM / SPF / DMARC lookups
+    - DNS-based reputation services (e.g., RBL lookups by mail filters)
+    - Some certificate-validation lookups during bulk operations
+level: high

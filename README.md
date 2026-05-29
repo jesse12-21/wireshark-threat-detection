@@ -7,15 +7,16 @@
 [![Wireshark](https://img.shields.io/badge/Wireshark-4.6.4-1679A7?style=for-the-badge&logo=wireshark&logoColor=white)](https://www.wireshark.org/)
 [![Ubuntu](https://img.shields.io/badge/Ubuntu_24.04-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)](https://ubuntu.com/)
 [![TShark](https://img.shields.io/badge/TShark-CLI-005571?style=for-the-badge&logo=gnu-bash&logoColor=white)](https://www.wireshark.org/docs/man-pages/tshark.html)
-[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+[![MITRE ATT&CK](https://img.shields.io/badge/MITRE_ATT%26CK-Mapped-red?style=for-the-badge)](https://attack.mitre.org/)
+[![Sigma](https://img.shields.io/badge/Sigma_Rules-Included-007ACC?style=for-the-badge)](https://github.com/SigmaHQ/sigma)
 
 <br>
 
-*A hands-on cybersecurity project demonstrating advanced network traffic analysis techniques — from initial Wireshark setup on Ubuntu Linux to identifying DNS tunneling, TLS fingerprinting with JA4, detecting C2 beacon patterns, and analyzing QUIC/HTTP3 traffic.*
+*A hands-on cybersecurity project demonstrating end-to-end network threat detection — from packet-level analysis in Wireshark, through Bash automation with TShark, to portable Sigma rules, SOC analyst response playbooks, and a worked investigation report.*
 
 <br>
 
-[Setup](#part-1---environment-setup--baseline-capture) · [HTTPS/QUIC Analysis](#part-2---analyzing-modern-encrypted-traffic-https--quic) · [DNS Threat Detection](#part-3---detecting-dns-based-threats) · [TLS Fingerprinting](#part-4---tls-fingerprinting-with-ja4) · [C2 Detection](#part-5---identifying-c2-beacon-patterns) · [Automation](#part-6---automating-detection-with-tshark)
+[Setup](#part-1---environment-setup--baseline-capture) · [HTTPS/QUIC](#part-2---analyzing-modern-encrypted-traffic-https--quic) · [DNS Detection](#part-3---detecting-dns-based-threats) · [JA4 Fingerprinting](#part-4---tls-fingerprinting-with-ja4) · [C2 Detection](#part-5---identifying-c2-beacon-patterns) · [Automation](#part-6---automating-detection-with-tshark) · [Operationalizing](#part-7---operationalizing-the-detections)
 
 </div>
 
@@ -23,7 +24,7 @@
 
 ## 📋 Project Overview
 
-Modern network threats are increasingly sophisticated — attackers use encrypted channels, DNS tunneling, and protocol abuse to evade traditional detection. This project demonstrates the practical skills needed to identify these threats at the packet level using Wireshark on an Ubuntu 24.04 system.
+Modern network threats are increasingly sophisticated — attackers use encrypted channels, DNS tunneling, and protocol abuse to evade traditional detection. This project demonstrates the practical skills needed to identify these threats at the packet level using Wireshark on an Ubuntu 24.04 system, and then operationalizes those detections as portable Sigma rules, SOC playbooks, and a worked investigation example.
 
 ### What This Project Covers
 
@@ -35,6 +36,56 @@ Modern network threats are increasingly sophisticated — attackers use encrypte
 | **TLS Fingerprinting** | Classifying clients/servers using JA4 fingerprints | JA4 plugin, `tls.handshake` filters |
 | **C2 Beacon Detection** | Recognizing command-and-control communication patterns | Time-based filters, statistics |
 | **Automated Analysis** | Scripting packet analysis for scalable threat detection | `tshark`, `bash` |
+| **Detection Engineering** | Portable detection rules and analyst response procedures | Sigma, MITRE ATT&CK |
+
+### 🎯 Detection Coverage — MITRE ATT&CK Mapping
+
+This project demonstrates detection capabilities for the following adversary techniques, mapped to the [MITRE ATT&CK framework](https://attack.mitre.org/):
+
+| Adversary Technique | ATT&CK ID | Tactic | Detection in This Project |
+|---|---|---|---|
+| **Application Layer Protocol: Web Protocols** | [T1071.001](https://attack.mitre.org/techniques/T1071/001/) | Command and Control | HTTPS/QUIC traffic baselining (Part 2); beacon timing analysis (Part 5) |
+| **Application Layer Protocol: DNS** | [T1071.004](https://attack.mitre.org/techniques/T1071/004/) | Command and Control | Long-name and TXT-record query analysis (Part 3, `dns_tunnel_detect.sh`) |
+| **Protocol Tunneling** | [T1572](https://attack.mitre.org/techniques/T1572/) | Command and Control | High-entropy subdomain detection; QUIC abuse identification (Parts 2 & 3) |
+| **Exfiltration Over Unencrypted Non-C2 Protocol** | [T1048.003](https://attack.mitre.org/techniques/T1048/003/) | Exfiltration | DNS tunneling ratio analysis with base-domain extraction (`dns_tunnel_detect.sh`) |
+| **Encrypted Channel: Asymmetric Cryptography** | [T1573.002](https://attack.mitre.org/techniques/T1573/002/) | Command and Control | JA4 fingerprinting (Part 4); SNI-less handshake detection (`tls_extract.sh`) |
+| **Scheduled Transfer** | [T1029](https://attack.mitre.org/techniques/T1029/) | Exfiltration | Jitter-based beacon detection (`beacon_detect.sh`) |
+| **Non-Standard Port** | [T1571](https://attack.mitre.org/techniques/T1571/) | Command and Control | Destination port distribution analysis (`beacon_detect.sh`) |
+
+### 📂 Repository Structure
+
+<div align="center">
+<img src="assets/repo-structure.png" alt="Repository structure diagram showing the README, LICENSE, assets, scripts, detections/sigma, playbooks, and reports directories with a description of each file's purpose" width="900">
+</div>
+
+<br>
+
+<details>
+<summary><strong>Text version (click to expand)</strong></summary>
+
+```
+.
+├── README.md                                          ← You are here
+├── LICENSE
+├── assets/                                            ← Screenshots referenced in this README
+├── scripts/
+│   ├── dns_tunnel_detect.sh                           ← Long DNS query / tunneling detection
+│   ├── tls_extract.sh                                 ← TLS handshake extraction + SNI-less evasion check
+│   ├── beacon_detect.sh                               ← Multi-IP beacon detection with mean/stddev/jitter
+│   └── generate_test_traffic.sh                       ← Reproducible test traffic generator
+├── detections/sigma/                                  ← Portable SIEM-agnostic detection rules
+│   ├── README.md
+│   ├── dns_long_query.yml                             ← ATT&CK T1071.004, T1048.003
+│   ├── dns_txt_high_volume.yml                        ← T1071.004, T1048.003 (correlation)
+│   ├── tls_no_sni_external.yml                        ← T1573.002
+│   └── https_beacon_pattern.yml                       ← T1071.001, T1029 (correlation)
+├── playbooks/
+│   └── sigma-detection-response.md                    ← SOC analyst response procedures for each rule
+└── reports/
+    └── IR-2026-001-suspected-c2-investigation.md      ← Worked dual-channel C2 investigation example
+```
+
+</details>
 
 ---
 
@@ -157,7 +208,7 @@ To see **all** modern encrypted web traffic (both traditional HTTPS and QUIC), I
 tcp.port == 443 || quic
 ```
 
-> **Why this matters:** Attackers are beginning to abuse QUIC for C2 communications because many legacy firewalls and IDS systems only inspect TCP-based TLS. Knowing how to identify and analyze QUIC traffic is an essential skill for modern network defense.
+> **Why this matters:** Attackers are beginning to abuse QUIC for C2 communications because many legacy firewalls and IDS systems only inspect TCP-based TLS. Knowing how to identify and analyze QUIC traffic is an essential skill for modern network defense. Encrypted DNS variants — **DNS-over-HTTPS (DoH)** and **DNS-over-QUIC (DoQ)** — are similarly bypassing legacy DNS-based detection, making this part of the toolkit increasingly important.
 
 ### Comparing HTTP vs HTTPS at the Packet Level
 
@@ -241,7 +292,7 @@ dns.qry.type == 16
 
 ### What Is TLS Fingerprinting?
 
-Every TLS client (browser, malware, API client) creates a slightly different **Client Hello** message during the TLS handshake. These differences — supported cipher suites, extensions, elliptic curves — create a fingerprint that can identify the client software. **JA4** is the current standard fingerprinting method (the successor to JA3), and Wireshark 4.6+ supports it natively.
+Every TLS client (browser, malware, API client) creates a slightly different **Client Hello** message during the TLS handshake. These differences — supported cipher suites, extensions, elliptic curves — create a fingerprint that can identify the client software. **JA4** is the current standard fingerprinting method (the successor to JA3), and Wireshark 4.2+ supports it natively.
 
 ### Generating and Comparing TLS Fingerprints
 
@@ -260,17 +311,18 @@ tls.handshake.type == 1
 
 <br>
 
-Expanding the TLS handshake details reveals the JA4 fingerprint fields. I compare fingerprints across clients:
+Expanding the TLS handshake details reveals the JA4 fingerprint fields. The table below illustrates the typical structure of JA4 fingerprints across different client implementations — note how the prefix (`t13d` = TLS 1.3, DNS-resolved domain) and the cipher/extension hash distinguish each client class:
 
-<!-- Replace these JA4 values with the actual fingerprints from your Wireshark capture if desired -->
-| Source | JA4 Fingerprint | Client Type |
+| JA4 Fingerprint (illustrative) | Client Type | Classification |
 |---|---|---|
 | `t13d1517h2_8daaf6152771_02713d6af862` | Firefox | Legitimate browser |
 | `t13d1516h2_8daaf6152771_e5627efa2ab1` | curl | CLI tool |
 | `t13d1110h2_2b729b4bf6f3_d5c81e3c4e79` | Python requests | Scripting library |
-| `t13d1011h2_5b57614c22b0_93f98aab42fd` | **Unknown — investigate** | Potential malware |
+| `t13d1011h2_5b57614c22b0_93f98aab42fd` | **Unknown** | Potential malware — investigate |
 
-> **Why this matters:** Known malware families have documented JA4 fingerprints. If you see a TLS handshake with a fingerprint matching Cobalt Strike, Metasploit, or other offensive tools — that's a high-confidence indicator of compromise. Maintaining a fingerprint allowlist of expected clients on your network enables rapid detection of unauthorized software.
+> **Why this matters:** Known malware families have documented JA4 fingerprints, maintained in databases like the [FoxIO JA4+ database](https://ja4db.com/). If you see a TLS handshake with a fingerprint matching Cobalt Strike, Sliver, Metasploit, or other offensive frameworks — that's a high-confidence indicator of compromise. Maintaining a fingerprint allowlist of expected clients on your network enables rapid detection of unauthorized software.
+
+> **2026 currency note:** Modern Chrome and Cloudflare-fronted services are starting to negotiate **post-quantum hybrid key exchange** (ML-KEM/Kyber, captured as `X25519MLKEM768` in the supported groups extension). JA4 captures this in the cipher/extension hash, so post-quantum-aware clients produce distinct fingerprints from pre-PQ clients — useful both for inventorying PQ rollout and for spotting clients that have *not* upgraded.
 
 ---
 
@@ -282,7 +334,9 @@ Command-and-control (C2) malware communicates with attacker infrastructure at re
 
 ### Analyzing Connection Timing
 
-I filter for all HTTPS connections to a suspicious set of IP addresses and examine the timing. In this case, the target domain resolves to multiple IPs via DNS round-robin (34.235.67.238, 52.71.170.232, and 54.83.233.101), so the filter must account for all of them:
+To safely demonstrate this analysis without standing up real attacker infrastructure, I simulate a beacon scenario with a `curl` loop targeting **httpbin.org** — a benign public HTTP testing service used here as a stand-in for the destination IPs. The methodology is identical to investigating real C2; only the target is benign.
+
+The target domain resolves to multiple IPs via DNS round-robin (`34.235.67.238`, `52.71.170.232`, and `54.83.233.101`), so the Wireshark filter must account for all of them — this mirrors real-world C2 infrastructure that distributes beacons across multiple destinations to evade single-IP blocklisting:
 
 ```
 (ip.dst == 34.235.67.238 || ip.dst == 52.71.170.232 || ip.dst == 54.83.233.101) && tcp.flags.syn == 1 && tcp.flags.ack == 0
@@ -290,12 +344,12 @@ I filter for all HTTPS connections to a suspicious set of IP addresses and exami
 
 <div align="center">
 <img src="assets/10-beacon-timing.png" alt="C2 beacon timing analysis showing regular intervals" width="700">
-<br><em>Connections to a suspicious host occurring at regular ~30-second intervals — a hallmark of C2 beaconing</em>
+<br><em>Connections to the simulated target occurring at regular ~30-second intervals — the timing pattern characteristic of real C2 beaconing</em>
 </div>
 
 <br>
 
-> **Real-world note:** The beacon target resolved to three different IP addresses via DNS round-robin. Filtering for only one IP would miss connections — a reminder that real-world C2 analysis often requires correlating traffic across multiple destination IPs for a single domain.
+> **Multi-IP correlation in practice:** Filtering for only one IP would miss connections that landed on the other two round-robin destinations. The automation script in Part 6 ([`beacon_detect.sh`](scripts/beacon_detect.sh)) accepts a comma-separated IP list — or a domain name to resolve live — and pools the SYNs across all destinations before computing the timing statistics.
 
 Using Wireshark's **Statistics → Conversations** view, I identify hosts with an unusual number of connections or data transfer patterns:
 
@@ -316,7 +370,7 @@ Using Wireshark's **Statistics → Conversations** view, I identify hosts with a
 | **Time of activity** | Business hours | 24/7, including off-hours |
 | **Jitter** | N/A | Small random variation (~10–20%) |
 
-> **Pro tip:** Sophisticated C2 frameworks like Cobalt Strike add **jitter** (random timing variation) to avoid detection. Look for connections that are *approximately* regular — not perfectly timed, but within a narrow statistical range. Wireshark's I/O Graph (`Statistics → I/O Graphs`) is excellent for visually identifying these patterns.
+> **Pro tip:** Sophisticated C2 frameworks like Cobalt Strike and Sliver add **jitter** (random timing variation) to avoid detection. Look for connections that are *approximately* regular — not perfectly timed, but within a narrow statistical range. Wireshark's I/O Graph (`Statistics → I/O Graphs`) is excellent for visually identifying these patterns; the quantitative version of the same analysis (mean / stddev / jitter percentage) is automated in Part 6.
 
 ---
 
@@ -324,102 +378,265 @@ Using Wireshark's **Statistics → Conversations** view, I identify hosts with a
 
 ### Why Automate?
 
-Manual packet analysis doesn't scale. **TShark** — Wireshark's command-line counterpart — enables scripted, repeatable analysis that can be integrated into security workflows and SIEM pipelines.
+Manual packet analysis doesn't scale. **TShark** — Wireshark's command-line counterpart — enables scripted, repeatable analysis that can be integrated into security workflows and SIEM pipelines. The three scripts in [`/scripts/`](scripts/) cover the detection categories from earlier parts of this project, each with input validation, severity tiering, and analyst-ready output.
 
-### Extracting TLS Handshake Data
+| Script | Purpose | Key Technique |
+|---|---|---|
+| [`dns_tunnel_detect.sh`](scripts/dns_tunnel_detect.sh) | Flag DNS queries indicative of tunneling or exfiltration | Length threshold + suspicious-ratio + base-domain grouping |
+| [`tls_extract.sh`](scripts/tls_extract.sh) | Inventory TLS Client Hellos and surface evasion indicators | SNI-absence detection |
+| [`beacon_detect.sh`](scripts/beacon_detect.sh) | Identify regular-interval connections suggestive of C2 (multi-IP support) | Mean / standard deviation / jitter analysis |
 
-I use TShark to extract all TLS Client Hello data from a capture file for bulk fingerprint analysis:
+All three scripts use `set -euo pipefail`, validate inputs and tool availability, and produce both human-readable reports and quantitative summaries that can be consumed by downstream tooling.
 
-```bash
-tshark -r capture.pcapng -Y "tls.handshake.type == 1" \
-  -T fields -e ip.src -e ip.dst -e tls.handshake.extensions_server_name \
-  -E separator=, -E quote=d > tls_handshakes.csv
-```
+A companion script, [`generate_test_traffic.sh`](scripts/generate_test_traffic.sh), produces detection-script-detectable patterns safely so anyone cloning this repository can verify the full pipeline end-to-end without shipping pcaps. See [Part 7](#part-7---operationalizing-the-detections) for the end-to-end workflow.
 
-**Output:**
+---
 
-```csv
-"10.0.2.15","142.251.211.142","google.com"
-"10.0.2.15","140.82.113.3","github.com"
-"10.0.2.15","104.16.133.229","cloudflare.com"
-```
+### DNS Tunneling Detection — `dns_tunnel_detect.sh`
 
-### Automated DNS Tunneling Detection Script
+This script flags DNS queries with abnormally long names — a primary indicator of data being encoded inside subdomain labels for exfiltration. Filtering on `dns.flags.response == 0` ensures only queries are counted (not query/response pairs), which keeps the suspicious-to-total ratio accurate.
 
-I write a script to flag DNS queries with suspiciously long domain names:
+**Usage:**
 
 ```bash
-#!/bin/bash
-# dns_tunnel_detect.sh - Flag potential DNS tunneling in packet captures
-
-CAPTURE_FILE=$1
-THRESHOLD=50
-
-echo "=== DNS Tunneling Detection Report ==="
-echo "Capture: $CAPTURE_FILE"
-echo "Threshold: domain names longer than $THRESHOLD characters"
-echo ""
-
-tshark -r "$CAPTURE_FILE" -Y "dns.qry.name.len > $THRESHOLD" \
-  -T fields -e frame.time -e ip.src -e dns.qry.name \
-  -E separator="|" | while IFS="|" read -r timestamp src domain; do
-    echo "[ALERT] $timestamp"
-    echo "  Source: $src"
-    echo "  Query:  $domain"
-    echo "  Length: ${#domain} chars"
-    echo ""
-done
-
-TOTAL=$(tshark -r "$CAPTURE_FILE" -Y "dns.qry.name.len > $THRESHOLD" \
-  -T fields -e dns.qry.name | wc -l)
-
-echo "=== Summary: $TOTAL suspicious DNS queries detected ==="
+./scripts/dns_tunnel_detect.sh capture.pcapng 50
 ```
 
-### Beacon Interval Analysis Script
-
-This script identifies hosts with suspiciously regular connection intervals. When a target domain resolves to multiple IPs (as is common with real C2 infrastructure using DNS round-robin), the analysis must combine traffic across all destination IPs:
+The second argument is the length threshold (default: 50 characters). Beyond per-query alerts, the script reports total query count, suspicious-to-total ratio, TXT record volume, and groups suspicious queries by their **base domain** (final two labels) so a single tunneling channel doesn't appear as hundreds of unique alerts:
 
 ```bash
-#!/bin/bash
-# beacon_detect.sh - Identify potential C2 beaconing behavior
+awk -F'.' '{print $(NF-1)"."$NF}' | sort | uniq -c | sort -rn
+```
 
-CAPTURE_FILE=$1
-TARGET_IPS=$2  # Comma-separated list or single IP
+A severity tier (HIGH / MEDIUM / LOW) is assigned automatically based on the count of suspicious queries detected.
 
-echo "=== Beacon Analysis for $TARGET_IPS ==="
+**Example output:**
 
-tshark -r "$CAPTURE_FILE" \
-  -Y "ip.dst == $TARGET_IPS && tcp.flags.syn == 1 && tcp.flags.ack == 0" \
-  -T fields -e frame.time_epoch | \
-awk 'NR > 1 { printf "Interval: %.2f seconds\n", $1 - prev } { prev = $1 }' | \
-sort | uniq -c | sort -rn | head -10
+```
+========================================
+  DNS Tunneling Detection Report
+========================================
+Capture:   capture_2026-05-15.pcapng
+Threshold: domain names longer than 50 characters
 
-echo ""
-echo "Regular intervals suggest automated beaconing behavior."
+[ALERT] Time: 12.45s into capture
+  Source:      10.0.2.15
+  Query:       aXjksRnsKfgPqLmNoTyUvWcXdEf.data-relay.exfil-test.lab
+  Query Type:  16
+  Name Length: 78 chars
+
+[... additional alerts omitted ...]
+
+========================================
+  Summary
+========================================
+  Total DNS queries:        342
+  Suspicious (long names):  47
+  TXT record queries:       47
+  Suspicious ratio:         13.7%
+
+⚠️  HIGH — Significant DNS tunneling indicators detected. Investigate immediately.
+
+Unique suspicious base domains:
+     47 exfil-test.lab
+```
+
+> **Why this matters:** A high proportion of TXT-record queries with long, high-entropy subdomain labels to a single base domain is a textbook signature of DNS tunneling. Open-source frameworks like `iodine` and `dnscat2` — and commodity exfiltration malware — produce exactly this pattern. Grouping by base domain (rather than full query string) prevents an analyst from being overwhelmed by hundreds of unique alerts that all belong to a single channel.
+
+---
+
+### TLS Handshake Extraction — `tls_extract.sh`
+
+TLS Client Hello messages carry the Server Name Indication (SNI) extension, which reveals the intended destination hostname. Most legitimate clients always send SNI — browsers, system updaters, and well-behaved APIs all rely on it for virtual-hosted infrastructure. **Malware and evasion tools sometimes omit SNI** to make destination identification harder for inspection tooling, especially when connecting directly to a hardcoded C2 IP rather than via a domain.
+
+This script extracts TLS handshake metadata to CSV for downstream analysis and explicitly flags handshakes with no SNI value.
+
+**Usage:**
+
+```bash
+./scripts/tls_extract.sh capture.pcapng tls_handshakes.csv
 ```
 
 **Example output:**
 
 ```
-=== Beacon Analysis for httpbin.org (3 IPs) ===
-Connection 2: interval 90.6 seconds
-Connection 3: interval 62.8 seconds
-Connection 4: interval 27.3 seconds
-Connection 5: interval 31.4 seconds
-Connection 6: interval 30.8 seconds
-Connection 7: interval 27.4 seconds
-Connection 8: interval 32.3 seconds
-Connection 9: interval 27.3 seconds
+========================================
+  TLS Handshake Extraction
+========================================
+Capture:  capture_2026-05-15.pcapng
+Output:   tls_handshakes.csv
 
---- Summary ---
-Total connections: 9
-Mean interval:    41.24 seconds
-Std deviation:    21.69 seconds
-Jitter:           52.6%
+Extracted 89 TLS Client Hello records.
+
+--- Top Destination Domains (by SNI) ---
+     34 www.google.com
+     22 duckduckgo.com
+     12 github.com
+      6 ubuntu.com
+      4 mozilla.org
+
+--- Unique Destination IPs ---
+142.250.80.46
+198.51.100.42
+140.82.121.4
+[...]
+
+⚠️  Found 11 TLS handshakes without SNI — possible evasion technique.
+   These connections may be attempting to hide the destination domain.
+
+   Connections without SNI:
+   10.0.2.15,198.51.100.42,443
+   10.0.2.15,198.51.100.42,443
+   [...]
+
+Full results saved to: tls_handshakes.csv
 ```
 
-> Connections 4–9 show a consistent ~30-second interval matching the configured beacon timer. The earlier outliers (connections 2–3) result from httpbin.org's DNS round-robin distributing initial connections across multiple IP addresses — a reminder that real-world analysis often requires correlating traffic across multiple destination IPs for a single domain.
+> **Detection insight:** When the same internal host repeatedly opens TLS sessions to the same external IP **without SNI**, two scenarios are most likely: (a) the client is connecting to a raw IP rather than a domain — often a sign of malware with hardcoded C2 infrastructure — or (b) the client is deliberately stripping SNI to evade hostname-based inspection. Either way, it's a high-value pivot for further investigation.
+
+The resulting CSV is also a clean input for downstream JA4 fingerprint correlation (Part 4) or SIEM ingestion.
+
+---
+
+### C2 Beacon Detection — `beacon_detect.sh`
+
+This script analyzes SYN packets to a target — which may be a single IP, a comma-separated list of IPs (for DNS round-robin destinations), or a domain name resolved at runtime — and computes the statistical regularity of connection intervals across all destinations. Real C2 beacons aren't perfectly periodic — modern frameworks like **Cobalt Strike** and **Sliver** add jitter (random timing variation) to defeat simple "every 60 seconds exactly" detection. This script captures that nuance by reporting **mean, standard deviation, and jitter percentage** rather than flagging only fixed intervals.
+
+**Usage:**
+
+```bash
+# Single IP
+./scripts/beacon_detect.sh capture.pcapng 198.51.100.42
+
+# Multi-IP (DNS round-robin destination)
+./scripts/beacon_detect.sh capture.pcapng 198.51.100.42,198.51.100.43,198.51.100.44
+
+# Domain (resolved live)
+./scripts/beacon_detect.sh capture.pcapng suspicious.example.com
+```
+
+The confidence assessment follows these thresholds:
+
+| Jitter | Connection Count | Confidence |
+|---|---|---|
+| `< 5%` | `> 10` | **HIGH** — Very regular intervals |
+| `< 20%` | `> 5` | **MEDIUM** — Possible jittered beacon |
+| Otherwise | — | **LOW** — Likely normal traffic |
+
+**Example output:**
+
+```
+========================================
+  Multi-IP C2 Beacon Analysis Report
+========================================
+Capture:    capture_2026-05-15.pcapng
+Target spec: 198.51.100.42
+Resolved:    1 IP(s)
+             - 198.51.100.42
+
+Total SYN packets across all targets: 11
+Capture duration for these hosts: 312s
+
+--- Combined Connection Interval Distribution ---
+(Count | Interval in seconds)
+
+      4 30
+      3 31
+      2 29
+      1 32
+
+--- Combined Statistical Summary ---
+  Mean interval:     30.20 seconds
+  Std deviation:     0.98 seconds
+  Jitter:            3.2%
+  Connection count:  11
+
+⚠️  HIGH CONFIDENCE — Very regular intervals with low jitter.
+
+Recommended next steps:
+  1. Confirm JA4 fingerprints match across all destination IPs
+  2. Investigate IP reputation for each destination (VirusTotal, AbuseIPDB)
+  3. Check passive DNS history — do these IPs share a common domain?
+  4. Review payload sizes for consistency across destinations
+  5. Check whether activity continues outside business hours
+```
+
+> **Real-world note:** Uses tshark's `ip.dst in {ip1 ip2 ip3}` set syntax to pool SYNs across all destinations before computing intervals — which is the correct approach for round-robin or fast-flux infrastructure. When a domain is passed instead of an IP list, the script resolves it live; note that current DNS resolution may differ from what was in the capture, so passing observed IPs is preferable for historical investigations.
+
+---
+
+### Putting It Together — A Three-Script Investigation Chain
+
+The scripts are designed to **compose**: an alert from one tool naturally pivots into the next. A typical investigation chain looks like:
+
+1. **`dns_tunnel_detect.sh`** flags an internal host issuing long, high-entropy DNS queries to a previously-unseen base domain → identify the source IP
+2. **`tls_extract.sh`** on the same capture, filtered to that source host, identifies all TLS destinations → look for SNI-less or otherwise anomalous connections
+3. **`beacon_detect.sh`** against any suspicious destination IP confirms or rules out periodic beaconing behavior
+
+A full worked example of this chain — using realistic outputs from all three scripts to investigate a simulated dual-channel C2 compromise — is available in [`reports/IR-2026-001-suspected-c2-investigation.md`](reports/IR-2026-001-suspected-c2-investigation.md).
+
+---
+
+## Part 7 - Operationalizing the Detections
+
+Production network defense doesn't stop at finding the bad traffic — it requires portable detection rules, repeatable analyst procedures, and worked examples of the full investigation lifecycle. The companion directories in this repository contain the operational artifacts that bridge the gap between "I can spot it in Wireshark" and "I can run this in a SOC."
+
+### Detection Rules — `/detections/sigma/`
+
+The four detection patterns demonstrated in Parts 3–5 are codified as portable [Sigma](https://github.com/SigmaHQ/sigma) rules. Sigma rules are converted to backend-specific query languages (Splunk SPL, Elasticsearch, Microsoft Sentinel KQL) via `sigma-cli`, making the same detection logic deployable across SIEM stacks.
+
+| Rule File | Detection | MITRE ATT&CK |
+|---|---|---|
+| [`dns_long_query.yml`](detections/sigma/dns_long_query.yml) | DNS queries with abnormally long names | T1071.004, T1048.003 |
+| [`dns_txt_high_volume.yml`](detections/sigma/dns_txt_high_volume.yml) | Sustained TXT-query volume from a single source (correlation rule) | T1071.004, T1048.003 |
+| [`tls_no_sni_external.yml`](detections/sigma/tls_no_sni_external.yml) | TLS handshakes to external IPs without SNI | T1573.002 |
+| [`https_beacon_pattern.yml`](detections/sigma/https_beacon_pattern.yml) | Repeated HTTPS connections to single destination (correlation rule) | T1071.001, T1029 |
+
+All rules target Zeek log schemas. See the [folder README](detections/sigma/README.md) for SIEM conversion examples and tuning guidance.
+
+### Response Playbook — `/playbooks/`
+
+Detection alone isn't sufficient — analysts need standardized response procedures. The [`sigma-detection-response.md`](playbooks/sigma-detection-response.md) playbook provides phased response procedures for each Sigma rule, covering:
+
+- Initial triage with explicit false-positive cheat sheets
+- Investigation steps with specific commands (Splunk SPL, VirusTotal / AbuseIPDB API calls, pivots to the project's PCAP scripts)
+- Decision trees mapping verdicts to next actions
+- Containment and response procedures, with explicit Tier 2 / IR escalation flags
+- Cross-cutting guidance for when multiple rules fire together (e.g., DNS tunneling co-occurring with HTTPS beaconing)
+
+### Worked Investigation — `/reports/`
+
+The [`IR-2026-001`](reports/IR-2026-001-suspected-c2-investigation.md) report walks through a full investigation that uses all three detection scripts in sequence to confirm a simulated dual-channel C2 compromise. It demonstrates:
+
+- Pivoting from one detection (DNS) to another (TLS) to a third (timing)
+- Quantitative confidence assessment based on jitter calculation
+- ATT&CK technique mapping for the observed activity
+- Recommended containment and response actions
+- Honest gap analysis of what the detections miss (DoH, multi-IP fast-flux)
+
+### Reproducible Test Traffic — `scripts/generate_test_traffic.sh`
+
+To enable anyone cloning this repository to verify the detection scripts end-to-end without shipping pcaps, [`generate_test_traffic.sh`](scripts/generate_test_traffic.sh) produces detection-script-detectable patterns safely:
+
+- **DNS tunneling pattern** — long TXT queries to RFC 2606 `.invalid` (always NXDOMAIN, no real exfiltration)
+- **SNI-less TLS handshakes** — via `openssl s_client` without `-servername` against `example.com`
+- **HTTPS beacon pattern** — periodic requests with small jitter
+- **Baseline traffic** — normal browsing patterns for contrast
+
+Run alongside `tcpdump` or Wireshark to produce a reproducible PCAP, then feed that PCAP to the detection scripts. Full usage in the script header.
+
+```bash
+# In one terminal:
+sudo tcpdump -i any -w test_traffic.pcapng
+
+# In another:
+./scripts/generate_test_traffic.sh all
+
+# After stopping the capture:
+./scripts/dns_tunnel_detect.sh test_traffic.pcapng 50
+./scripts/tls_extract.sh test_traffic.pcapng tls.csv
+./scripts/beacon_detect.sh test_traffic.pcapng example.com
+```
 
 ---
 
@@ -436,9 +653,12 @@ A quick reference of all display filters used throughout this project:
 | `dns` | All DNS traffic |
 | `dns.qry.name.len > 50` | Potentially tunneled DNS queries |
 | `dns.qry.type == 16` | DNS TXT record queries |
+| `dns.flags.response == 0` | DNS queries only (excludes responses) |
 | `tls.handshake.type == 1` | TLS Client Hello messages (for fingerprinting) |
+| `tls.handshake.type == 1 && !tls.handshake.extensions_server_name` | TLS Client Hellos missing SNI (evasion indicator) |
 | `ip.addr == <IP>` | All traffic to/from a specific IP |
 | `ip.dst == <IP>` | Traffic going to a specific IP |
+| `ip.dst in {<IP1> <IP2> <IP3>}` | Traffic to any IP in a set (for round-robin destinations) |
 | `!(ip.addr == <IP>) && (tcp.port == 443 \|\| quic)` | Encrypted traffic excluding a specific IP |
 
 ---
@@ -452,23 +672,26 @@ A quick reference of all display filters used throughout this project:
 | **TShark** | 4.6.4 | CLI-based packet analysis & scripting |
 | **Firefox** | Latest | Traffic generation (HTTPS/QUIC) |
 | **JA4** | Built-in (Wireshark 4.2+) | TLS fingerprint generation |
+| **Sigma** | 2.0 | Portable detection rule format |
+| **Bash** | 5.2+ | Detection script runtime |
 
 ---
 
 ## 📚 Summary
 
-This project demonstrates practical network threat detection skills through six progressive exercises:
+This project demonstrates practical, end-to-end network threat detection through seven progressive parts:
 
 1. **Environment Setup** — Installed and configured Wireshark on Ubuntu 24.04 with least-privilege access through group-based permissions
 2. **Encrypted Traffic Analysis** — Captured and analyzed both traditional HTTPS (TLS over TCP) and modern QUIC/HTTP3 (TLS over UDP) traffic, understanding the security implications of each
 3. **DNS Threat Detection** — Identified indicators of DNS tunneling and data exfiltration by analyzing query lengths, record types, and request patterns
 4. **TLS Fingerprinting** — Used JA4 fingerprints to classify TLS clients and detect unauthorized or malicious software on the network
 5. **C2 Beacon Detection** — Analyzed connection timing patterns to identify potential command-and-control beaconing behavior, including correlating traffic across multiple IPs for a single domain
-6. **Automated Analysis** — Built TShark-based scripts for scalable, repeatable threat detection that can integrate into security operations workflows
+6. **Automated Analysis** — Built three TShark-based detection scripts (DNS tunneling, TLS extraction with SNI-less evasion detection, multi-IP jitter-based beacon analysis) with input validation, severity tiering, and analyst-ready output
+7. **Operationalizing the Detections** — Codified detections as portable Sigma rules, authored a SOC response playbook covering all four detections, and documented a worked dual-channel C2 investigation using the full toolkit end-to-end
 
 ### Skills Demonstrated
 
-`Packet Analysis` · `Network Forensics` · `Threat Detection` · `TLS/SSL Analysis` · `DNS Security` · `Protocol Analysis` · `Linux Administration` · `Bash Scripting` · `QUIC/HTTP3` · `Security Automation`
+`Packet Analysis` · `Network Forensics` · `Threat Detection` · `TLS/SSL Analysis` · `DNS Security` · `Protocol Analysis` · `MITRE ATT&CK` · `Detection Engineering` · `Sigma Rules` · `SOC Playbooks` · `Incident Response` · `Linux Administration` · `Bash Scripting` · `QUIC/HTTP3` · `Security Automation`
 
 ---
 
