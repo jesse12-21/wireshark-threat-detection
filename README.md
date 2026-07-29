@@ -50,7 +50,7 @@ This project demonstrates detection capabilities for the following adversary tec
 | **Application Layer Protocol: DNS** | [T1071.004](https://attack.mitre.org/techniques/T1071/004/) | Command and Control | Long-name and TXT-record query analysis (Part 3, `dns_tunnel_detect.sh`) |
 | **Protocol Tunneling** | [T1572](https://attack.mitre.org/techniques/T1572/) | Command and Control | High-entropy subdomain detection; QUIC abuse identification (Parts 2 & 3) |
 | **Exfiltration Over Unencrypted Non-C2 Protocol** | [T1048.003](https://attack.mitre.org/techniques/T1048/003/) | Exfiltration | DNS tunneling ratio analysis with base-domain extraction (`dns_tunnel_detect.sh`) |
-| **Encrypted Channel: Asymmetric Cryptography** | [T1573.002](https://attack.mitre.org/techniques/T1573/002/) | Command and Control | JA4 fingerprinting (Part 4); SNI-less handshake detection (`tls_extract.sh`) |
+| **Encrypted Channel: Asymmetric Cryptography** | [T1573.002](https://attack.mitre.org/techniques/T1573/002/) | Command and Control | JA4 fingerprinting (Part 4); ECH hardcoded-config detection (Part 8, ech_analyze.sh) |
 | **Scheduled Transfer** | [T1029](https://attack.mitre.org/techniques/T1029/) | Exfiltration | Jitter-based beacon detection (`beacon_detect.sh`) |
 | **Non-Standard Port** | [T1571](https://attack.mitre.org/techniques/T1571/) | Command and Control | Destination port distribution analysis (`beacon_detect.sh`) |
 | **Domain Fronting** | [T1090.004](https://attack.mitre.org/techniques/T1090/004/) | Command and Control | ECH cover-SNI analysis; hardcoded-ECHConfig detection (Part 8, `ech_analyze.sh`) |
@@ -398,7 +398,7 @@ Using Wireshark's **Statistics → Conversations** view, I identify hosts with a
 
 ### Why Automate?
 
-Manual packet analysis doesn't scale. **TShark** — Wireshark's command-line counterpart — enables scripted, repeatable analysis that can be integrated into security workflows and SIEM pipelines. The three scripts in [`/scripts/`](scripts/) cover the detection categories from earlier parts of this project, each with input validation, severity tiering, and analyst-ready output.
+Manual packet analysis doesn't scale. **TShark** — Wireshark's command-line counterpart — enables scripted, repeatable analysis that can be integrated into security workflows and SIEM pipelines. The scripts in /scripts/ cover the detection categories from earlier parts of this project, each with input validation, severity tiering, and analyst-ready output. The three below are documented here; Part 8 adds three more covering ECH, post-quantum TLS, and AI egress.
 
 | Script | Purpose | Key Technique |
 |---|---|---|
@@ -603,7 +603,7 @@ Production network defense doesn't stop at finding the bad traffic — it requir
 
 ### Detection Rules — `/detections/sigma/`
 
-The four detection patterns demonstrated in Parts 3–5 are codified as portable [Sigma](https://github.com/SigmaHQ/sigma) rules. Sigma rules are converted to backend-specific query languages (Splunk SPL, Elasticsearch, Microsoft Sentinel KQL) via `sigma-cli`, making the same detection logic deployable across SIEM stacks.
+The detection patterns demonstrated throughout this project are codified as portable [Sigma](https://github.com/SigmaHQ/sigma) rules. Sigma rules are converted to backend-specific query languages (Splunk SPL, Elasticsearch, Microsoft Sentinel KQL) via `sigma-cli`, making the same detection logic deployable across SIEM stacks.
 
 | Rule File | Detection | MITRE ATT&CK |
 |---|---|---|
