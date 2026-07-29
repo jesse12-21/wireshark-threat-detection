@@ -4,19 +4,20 @@
 
 ### Detecting Real-World Attack Patterns Through Packet-Level Forensics
 
-[![Wireshark](https://img.shields.io/badge/Wireshark-4.6.4-1679A7?style=for-the-badge&logo=wireshark&logoColor=white)](https://www.wireshark.org/)
+[![Wireshark](https://img.shields.io/badge/Wireshark-4.6.7-1679A7?style=for-the-badge&logo=wireshark&logoColor=white)](https://www.wireshark.org/)
 [![Ubuntu](https://img.shields.io/badge/Ubuntu_24.04-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)](https://ubuntu.com/)
 [![TShark](https://img.shields.io/badge/TShark-CLI-005571?style=for-the-badge&logo=gnu-bash&logoColor=white)](https://www.wireshark.org/docs/man-pages/tshark.html)
 [![MITRE ATT&CK](https://img.shields.io/badge/MITRE_ATT%26CK-Mapped-red?style=for-the-badge)](https://attack.mitre.org/)
 [![Sigma](https://img.shields.io/badge/Sigma_Rules-Included-007ACC?style=for-the-badge)](https://github.com/SigmaHQ/sigma)
+[![Validate Detections](https://img.shields.io/github/actions/workflow/status/jesse12-21/wireshark-threat-detection/validate-detections.yml?branch=main&style=for-the-badge&label=Detections%20CI)](../../actions/workflows/validate-detections.yml)
 
 <br>
 
-*A hands-on cybersecurity project demonstrating end-to-end network threat detection — from packet-level analysis in Wireshark, through Bash automation with TShark, to portable Sigma rules, SOC analyst response playbooks, and a worked investigation report.*
+*A hands-on cybersecurity project demonstrating end-to-end network threat detection — from packet-level analysis in Wireshark, through Bash automation with TShark, to portable Sigma rules, SOC analyst response playbooks, and a worked investigation report — maintained against a live protocol landscape, including Encrypted Client Hello, post-quantum TLS, and AI/agent egress.*
 
 <br>
 
-[Setup](#part-1---environment-setup--baseline-capture) · [HTTPS/QUIC](#part-2---analyzing-modern-encrypted-traffic-https--quic) · [DNS Detection](#part-3---detecting-dns-based-threats) · [JA4 Fingerprinting](#part-4---tls-fingerprinting-with-ja4) · [C2 Detection](#part-5---identifying-c2-beacon-patterns) · [Automation](#part-6---automating-detection-with-tshark) · [Operationalizing](#part-7---operationalizing-the-detections)
+[Setup](#part-1---environment-setup--baseline-capture) · [HTTPS/QUIC](#part-2---analyzing-modern-encrypted-traffic-https--quic) · [DNS Detection](#part-3---detecting-dns-based-threats) · [JA4 Fingerprinting](#part-4---tls-fingerprinting-with-ja4) · [C2 Detection](#part-5---identifying-c2-beacon-patterns) · [Automation](#part-6---automating-detection-with-tshark) · [Operationalizing](#part-7---operationalizing-the-detections) · [July 2026 Refresh](#part-8---keeping-detections-current-july-2026-refresh)
 
 </div>
 
@@ -37,6 +38,7 @@ Modern network threats are increasingly sophisticated — attackers use encrypte
 | **C2 Beacon Detection** | Recognizing command-and-control communication patterns | Time-based filters, statistics |
 | **Automated Analysis** | Scripting packet analysis for scalable threat detection | `tshark`, `bash` |
 | **Detection Engineering** | Portable detection rules and analyst response procedures | Sigma, MITRE ATT&CK |
+| **Detection Lifecycle** | Scheduled reviews; deprecating and replacing rules as protocols change | ECH, ML-KEM, MCP, GitHub Actions |
 
 ### 🎯 Detection Coverage — MITRE ATT&CK Mapping
 
@@ -51,11 +53,15 @@ This project demonstrates detection capabilities for the following adversary tec
 | **Encrypted Channel: Asymmetric Cryptography** | [T1573.002](https://attack.mitre.org/techniques/T1573/002/) | Command and Control | JA4 fingerprinting (Part 4); SNI-less handshake detection (`tls_extract.sh`) |
 | **Scheduled Transfer** | [T1029](https://attack.mitre.org/techniques/T1029/) | Exfiltration | Jitter-based beacon detection (`beacon_detect.sh`) |
 | **Non-Standard Port** | [T1571](https://attack.mitre.org/techniques/T1571/) | Command and Control | Destination port distribution analysis (`beacon_detect.sh`) |
+| **Domain Fronting** | [T1090.004](https://attack.mitre.org/techniques/T1090/004/) | Command and Control | ECH cover-SNI analysis; hardcoded-ECHConfig detection (Part 8, `ech_analyze.sh`) |
+| **Masquerading** | [T1036](https://attack.mitre.org/techniques/T1036/) | Defense Evasion | JA4 / post-quantum capability mismatch (Part 8, `pq_readiness.sh`) |
+| **Exfiltration Over Web Service** | [T1567](https://attack.mitre.org/techniques/T1567/) | Exfiltration | LLM prompt-channel upload volume analysis (Part 8, `ai_egress_inventory.sh`) |
+| **Remote Access Tools** | [T1219](https://attack.mitre.org/techniques/T1219/) | Command and Control | MCP server connection detection (Part 8, `ai_egress_inventory.sh`) |
 
 ### 📂 Repository Structure
 
 <div align="center">
-<img src="assets/repo-structure.png" alt="Repository structure diagram showing the README, LICENSE, assets, scripts, detections/sigma, playbooks, and reports directories with a description of each file's purpose" width="900">
+<img src="assets/repo-structure.png" alt="Repository structure diagram. Left panel lists the file tree: README, LICENSE, .github/workflows, assets, scripts, detections/sigma, playbooks, docs, and reports, with files added in the July 2026 refresh highlighted in green and the deprecated SNI rule in red. Right panel describes each file's purpose and its MITRE ATT&CK mapping." width="900">
 </div>
 
 <br>
@@ -67,20 +73,34 @@ This project demonstrates detection capabilities for the following adversary tec
 .
 ├── README.md                                          ← You are here
 ├── LICENSE
+├── .github/workflows/
+│   └── validate-detections.yml                        ← CI: Sigma + ShellCheck + hygiene on every push
 ├── assets/                                            ← Screenshots referenced in this README
 ├── scripts/
 │   ├── dns_tunnel_detect.sh                           ← Long DNS query / tunneling detection
-│   ├── tls_extract.sh                                 ← TLS handshake extraction + SNI-less evasion check
+│   ├── tls_extract.sh                                 ← TLS handshake extraction + SNI analysis
 │   ├── beacon_detect.sh                               ← Multi-IP beacon detection with mean/stddev/jitter
+│   ├── ech_analyze.sh                                 ← ECH posture + DNS HTTPS-RR correlation
+│   ├── pq_readiness.sh                                ← Post-quantum TLS inventory + capability mismatch
+│   ├── ai_egress_inventory.sh                         ← LLM API and MCP server egress inventory
 │   └── generate_test_traffic.sh                       ← Reproducible test traffic generator
 ├── detections/sigma/                                  ← Portable SIEM-agnostic detection rules
 │   ├── README.md
 │   ├── dns_long_query.yml                             ← ATT&CK T1071.004, T1048.003
 │   ├── dns_txt_high_volume.yml                        ← T1071.004, T1048.003 (correlation)
-│   ├── tls_no_sni_external.yml                        ← T1573.002
-│   └── https_beacon_pattern.yml                       ← T1071.001, T1029 (correlation)
+│   ├── https_beacon_pattern.yml                       ← T1071.001, T1029 (correlation)
+│   ├── tls_ech_without_dns_config.yml                 ← T1573.002, T1090.004 (correlation)
+│   ├── tls_missing_pq_keyshare.yml                    ← T1573.002, T1036
+│   ├── llm_api_egress_unsanctioned.yml                ← T1567, T1048 (correlation)
+│   ├── mcp_server_connection.yml                      ← T1071.001, T1219
+│   └── tls_no_sni_external.yml                        ← DEPRECATED — superseded by ECH rule
 ├── playbooks/
-│   └── sigma-detection-response.md                    ← SOC analyst response procedures for each rule
+│   └── sigma-detection-response.md                    ← Analyst response procedures (PB-01 … PB-08)
+├── docs/
+│   ├── known-limitations.md                           ← Tested findings: backend quirks and coverage gaps
+│   └── refreshes/
+│       ├── README.md                                  ← Refresh log and review triggers
+│       └── 2026-07.md                                 ← July 2026: ECH, post-quantum TLS, AI egress
 └── reports/
     └── IR-2026-001-suspected-c2-investigation.md      ← Worked dual-channel C2 investigation example
 ```
@@ -589,8 +609,12 @@ The four detection patterns demonstrated in Parts 3–5 are codified as portable
 |---|---|---|
 | [`dns_long_query.yml`](detections/sigma/dns_long_query.yml) | DNS queries with abnormally long names | T1071.004, T1048.003 |
 | [`dns_txt_high_volume.yml`](detections/sigma/dns_txt_high_volume.yml) | Sustained TXT-query volume from a single source (correlation rule) | T1071.004, T1048.003 |
-| [`tls_no_sni_external.yml`](detections/sigma/tls_no_sni_external.yml) | TLS handshakes to external IPs without SNI | T1573.002 |
 | [`https_beacon_pattern.yml`](detections/sigma/https_beacon_pattern.yml) | Repeated HTTPS connections to single destination (correlation rule) | T1071.001, T1029 |
+| [`tls_ech_without_dns_config.yml`](detections/sigma/tls_ech_without_dns_config.yml) | ECH session with no preceding DNS HTTPS-RR lookup (correlation rule) | T1573.002, T1090.004 |
+| [`tls_missing_pq_keyshare.yml`](detections/sigma/tls_missing_pq_keyshare.yml) | Browser-shaped JA4 lacking a post-quantum key share | T1573.002, T1036 |
+| [`llm_api_egress_unsanctioned.yml`](detections/sigma/llm_api_egress_unsanctioned.yml) | LLM API egress and high-volume upload (correlation rule) | T1567, T1048 |
+| [`mcp_server_connection.yml`](detections/sigma/mcp_server_connection.yml) | MCP server connections to external hosts | T1071.001, T1219 |
+| [`tls_no_sni_external.yml`](detections/sigma/tls_no_sni_external.yml) | *Deprecated 2026-07-29* — superseded by the ECH rule above | T1573.002 |
 
 All rules target Zeek log schemas. See the [folder README](detections/sigma/README.md) for SIEM conversion examples and tuning guidance.
 
@@ -603,6 +627,8 @@ Detection alone isn't sufficient — analysts need standardized response procedu
 - Decision trees mapping verdicts to next actions
 - Containment and response procedures, with explicit Tier 2 / IR escalation flags
 - Cross-cutting guidance for when multiple rules fire together (e.g., DNS tunneling co-occurring with HTTPS beaconing)
+
+Eight playbooks (PB-01 through PB-08) cover the active rule set. PB-03 is retained in superseded form rather than deleted, so the reasoning behind its replacement stays with the repository.
 
 ### Worked Investigation — `/reports/`
 
@@ -640,6 +666,208 @@ sudo tcpdump -i any -w test_traffic.pcapng
 
 ---
 
+## Part 8 - Keeping Detections Current (July 2026 Refresh)
+
+**Refresh 2026-07 · Reviewed 2026-07-29 · Next scheduled review 2026-10-29**
+
+Detections expire. Not because they were written badly, but because the protocols they observe keep moving — and the failure is silent. A rule keeps firing, the alerts keep looking plausible, and the signal has quietly drained out of them.
+
+This section summarises the **July 2026 review** of every rule in this repository. One rule was deprecated, eight were added, and one existing capability turned out to matter more than when it was written.
+
+Refreshes are dated and logged rather than folded into the README, so the reasoning behind each change stays findable as the project keeps pace with the protocol landscape. Full write-up: [`docs/refreshes/2026-07.md`](docs/refreshes/2026-07.md) · Refresh log: [`docs/refreshes/`](docs/refreshes/README.md).
+
+| Change | Artifact | Reason |
+|---|---|---|
+| **Deprecated** | `tls_no_sni_external.yml` | Encrypted Client Hello invalidated its premise |
+| **Added** | `tls_ech_without_dns_config.yml` + `ech_analyze.sh` | Replacement keyed on a DNS precondition ECH cannot avoid |
+| **Added** | `tls_missing_pq_keyshare.yml` + `pq_readiness.sh` | Post-quantum adoption creates an inverted capability signal |
+| **Added** | `llm_api_egress_unsanctioned.yml`, `mcp_server_connection.yml` + `ai_egress_inventory.sh` | AI/agent traffic is a new network-visible surface |
+| **Added** | `.github/workflows/validate-detections.yml` | Rules are code; they get CI |
+
+---
+
+### Encrypted Client Hello broke a rule in this repository
+
+The original `tls_no_sni_external.yml` detected TLS Client Hellos sent externally with no Server Name Indication. In 2024 that was sound: virtual-hosted infrastructure requires SNI, so a client omitting it is probably connecting to a hardcoded IP — which is what implants with embedded C2 addresses do.
+
+**Encrypted Client Hello removes that signal.** ECH splits the handshake into a visible `ClientHelloOuter` carrying a generic cover name and an encrypted `ClientHelloInner` carrying the real destination. Cloudflare enabled it by default across its customer base in late 2023 and both Firefox and Chrome shipped support that October, so availability propagated across a very large fraction of the web through a small number of CDN decisions.
+
+Two second-order effects matter more than the headline:
+
+**GREASE ECH removes the obvious workaround.** The natural response — detect ECH usage instead of SNI absence — does not work. Browsers emit an ECH-shaped extension on effectively every Client Hello whether or not ECH is in use, specifically so privacy-preserving connections cannot be singled out. The lesson from ESNI, which stood out and was therefore trivially blockable, was learned deliberately.
+
+**Adversaries are already there.** NTT Security Holdings identified malware using ECH for command-and-control while analysing targeted attacks against Japanese organisations. Any mechanism that reliably conceals a destination gets adopted by people who want their destination concealed.
+
+The rule was deprecated rather than tuned because the failure is bidirectional — false positives rise as legitimate ECH traffic trips it, *and* false negatives rise as adversaries blend into that same traffic. There is no threshold that fixes both.
+
+#### The replacement — `ech_analyze.sh`
+
+A conforming ECH client cannot encrypt its `ClientHelloInner` without the server's `ECHConfig`, and that config is published in the target's HTTPS resource record (DNS type 65, RFC 9460). The lookup is mandatory and, on networks using conventional DNS, happens in the clear.
+
+So an ECH session with **no preceding HTTPS-RR query** from the same host means the client already held the config — hardcoded or delivered out of band. No mainstream browser does this. An implant with an embedded config does exactly this.
+
+```bash
+./scripts/ech_analyze.sh capture.pcapng
+```
+
+*Illustrative output — synthetic values, provided to show report structure:*
+
+```
+--- TLS Client Hello Inventory ---
+  Total Client Hellos:        412
+  Carrying ECH extension:     387
+  ECH-extension share:        93.9%
+
+  Note: includes GREASE ECH. Browsers send an ECH-shaped extension on
+  nearly every handshake regardless of actual use, so this figure
+  measures client capability, not confirmed ECH sessions.
+
+--- Correlation: ECH Without HTTPS-RR Lookup ---
+  The following hosts presented ECH handshakes with no HTTPS-RR
+  query in this capture:
+
+    - 10.0.2.15
+
+  Interpretation: a conforming client cannot build a ClientHelloInner
+  without an ECHConfig, and that config is published in the HTTPS RR.
+  A host doing ECH without the lookup holds a hardcoded config.
+```
+
+> **Stated limitations.** DNS caching can place the lookup outside the capture window; DoH and DoQ hide the query entirely; session resumption can reuse an earlier config. This is a lead generator, not a verdict — and the script says so in its own output rather than leaving the analyst to discover it.
+
+---
+
+### Post-quantum adoption created a detection that improves over time
+
+Most TLS detections decay. This one does the opposite.
+
+Hybrid post-quantum key agreement moved from experiment to default across mainstream browsers and major CDNs during 2025–2026; roughly half of measured public domains now negotiate it. The group those clients present is `X25519MLKEM768`, IANA code point **4588 (0x11EC)**, sent alongside a classical X25519 share by default.
+
+The detection inverts the usual framing. Instead of *what does this client have that malware has*, it asks *what does every current browser have that malware does not*.
+
+Malware TLS stacks lag — implants on statically linked older OpenSSL, bespoke TLS, or runtimes pinned to pre-3.5 OpenSSL cannot offer PQ groups. An implant spoofing a browser JA4 to blend in will still fail to present a post-quantum key share, because the fingerprint is cosmetic and the cryptographic capability is not.
+
+```bash
+./scripts/pq_readiness.sh capture.pcapng
+```
+
+*Illustrative output:*
+
+```
+--- Adoption Summary ---
+  Total Client Hellos:            412
+  Offering a hybrid PQ group:     381
+  Classical-only:                 31
+  PQ-capable share:               92.5%
+
+--- Fingerprint vs Capability Mismatch ---
+  Clients presenting a browser-shaped JA4 (t13d prefix) while
+  offering no post-quantum group:
+
+  (Count | Source IP | JA4 | Outer SNI)
+      11 10.0.2.15,t13d1516h2_8daaf6152771_e5627efa2ab1,
+
+  A t13d-prefixed JA4 indicates a TLS 1.3 client with a
+  browser-like extension profile. Offering no PQ group is
+  inconsistent with a current browser build.
+```
+
+> **The dominant false positive is not malware-adjacent.** Enterprise TLS-inspection proxies rewrite the Client Hello and commonly strip PQ groups. Those get excluded by egress IP, and the playbook makes checking for them the first triage step.
+
+---
+
+### AI and agent traffic is a surface this project did not originally cover
+
+Two additions, both covering ground conventional network monitoring was not designed for.
+
+**LLM inference APIs.** The prompt field is an egress channel with no inspection on it. A user pasting a customer table into a chat window — or an implant submitting a credential store — produces an ordinary HTTPS POST to a reputable domain with a valid certificate. Conventional DLP sees nothing distinguishable. Without content inspection, request-direction byte volume is the strongest available signal: interactive chat produces tens of kilobytes per session, bulk submission produces orders of magnitude more.
+
+**MCP servers.** Model Context Protocol connects assistants to external tools. Reaching an untrusted server grants it influence over what the assistant does with everything it can access. Vendors shipped endpoint and supply-chain scanners for prompt injection and malicious tool definitions during 2025–2026; *which MCP servers hosts on this network actually reach* is a separate, network-layer question.
+
+```bash
+./scripts/ai_egress_inventory.sh capture.pcapng
+```
+
+*Illustrative output:*
+
+```
+--- LLM Inference API Sessions ---
+  api.anthropic.com                        14 session(s)
+  api.openai.com                            3 session(s)
+
+--- Request-Direction Volume to LLM Endpoints ---
+  (Bytes sent | Source -> Destination IP)
+
+  48219          10.0.2.20 -> 203.0.113.55
+  12884901       10.0.2.15 -> 203.0.113.90
+      HIGH VOLUME - exceeds threshold. Possible bulk
+      submission of documents or source code. Check
+      whether an agentic coding assistant explains it
+      before treating as exfiltration.
+```
+
+> **A false-positive interaction worth knowing about.** Agentic tool-use traffic is periodic and will resemble C2 beaconing to `beacon_detect.sh`. The discriminator is payload-size variance: beacons are uniform by design, agent traffic is bursty and irregular because tool calls carry different amounts of data. This is documented in the playbook so it doesn't have to be rediscovered at 2am.
+>
+> **Coverage gap, stated plainly.** The MCP stdio transport is local-only and produces no network artifacts. This detection cannot see it. Absence of findings is not absence of MCP use.
+
+---
+
+### What ECH did *not* break
+
+The most useful conclusion from this review is about what survived. ECH removes plaintext destination metadata. It does not touch:
+
+- **Connection timing** — beacon interval, jitter, periodicity are fully intact
+- **Payload size distribution** — uniformity of transferred bytes is unaffected
+- **JA4 fingerprinting** — computed from the outer Client Hello, which remains visible
+- **Destination IP and ASN** — still on the wire
+- **DNS-layer metadata**, on networks not using encrypted DNS
+
+There's a strategic point here. As content-level visibility erodes — ECH, TLS 1.3 encrypted certificates, DoH — **behavioural and statistical detection becomes proportionally more valuable**, because it operates on properties encryption does not conceal. The statistical beaconing work in Parts 5 and 6 was written before that shift was obvious. It is more relevant now than when it was built.
+
+The general lesson: detections keyed on *what is in the traffic* have a shelf life set by the encryption roadmap. Detections keyed on *how the traffic behaves* age considerably better.
+
+---
+
+### Detection-as-code — `.github/workflows/validate-detections.yml`
+
+Rules in this repository are treated as code and validated on every push touching `detections/` or `scripts/`:
+
+| Check | Purpose |
+|---|---|
+| YAML syntax | Catches malformed rules before merge |
+| `sigma check` | Official Sigma specification validation |
+| UUID uniqueness | A duplicate silently breaks correlation references |
+| Backend conversion | Smoke-tests that rules actually compile to SPL |
+| ShellCheck + `bash -n` | Script quality at warning severity |
+| Executable bit | Scripts stay runnable for anyone cloning |
+| Placeholder scan | No `TODO` or template text reaches a reviewer |
+| Capture-file scan | Asserts `.gitignore` exclusions held |
+
+---
+
+### Verifying the rules actually work
+
+Rules that parse are not the same as rules that mean what you intended. Converting each rule to a backend query and reading the output surfaced two problems worth recording:
+
+- **The pySigma Splunk backend does not parenthesise OR groups formed across separate selections.** Because SPL binds AND tighter than OR, `a and (b or c)` renders as `fa="1" fb="2" OR fc="3"`, which evaluates as `(a AND b) OR c`. Sigma's canonical `1 of selection_*` idiom produces byte-identical output, so it cannot be written around within a single rule. The MCP detection was split into two AND-only rules as a result — better practice regardless, since a POST and an SSE stream are distinct observables. List-valued fields and negated CIDR groups are unaffected; they render correctly as `IN (...)` and `NOT (...)`.
+- **There is no published Zeek pipeline plugin for pySigma.** Conversion instructions referencing `-p zeek` fail outright. Corrected to `--without-pipeline`, which is appropriate here because these rules already use Zeek's own field names.
+
+Both are documented with reproductions in [`docs/known-limitations.md`](docs/known-limitations.md), alongside the coverage gaps inherent to the detection approach.
+
+---
+
+### Detection lifecycle policy
+
+This review established a working practice for the repository:
+
+- **Rules are deprecated, not deleted.** A removed rule loses its history; a deprecated one keeps the record of what it assumed, what changed, and what replaced it.
+- **Every rule states its expiry conditions.** If a detection depends on a protocol assumption, that assumption is written where the next person will find it.
+- **Limitations are declared, not discovered.** DNS caching, DoH blind spots, stdio invisibility, proxy interference — all documented in the rule files and script headers.
+- **Rules are converted and read, not just parsed.** Backend output is checked before deployment; findings go in `known-limitations.md`.
+- **Reviews are scheduled, not incidental.** Each is dated and logged in [`docs/refreshes/`](docs/refreshes/README.md). Next review 2026-10-29, or sooner if ECH ratifies, PQ adoption crosses meaningful thresholds, or MCP transport patterns shift.
+
+---
+
 ## 🔑 Key Display Filters Reference
 
 A quick reference of all display filters used throughout this project:
@@ -659,6 +887,11 @@ A quick reference of all display filters used throughout this project:
 | `ip.addr == <IP>` | All traffic to/from a specific IP |
 | `ip.dst == <IP>` | Traffic going to a specific IP |
 | `ip.dst in {<IP1> <IP2> <IP3>}` | Traffic to any IP in a set (for round-robin destinations) |
+| `tls.handshake.extension.type == 65037` | TLS Client Hellos carrying an ECH extension (0xFE0D) |
+| `dns.qry.type == 65` | DNS HTTPS resource record queries (carries ECHConfig, RFC 9460) |
+| `tls.handshake.extensions_supported_group == 4588` | Clients offering X25519MLKEM768 post-quantum key agreement |
+| `tls.handshake.ja4 matches "^t13d"` | TLS 1.3 clients with a browser-shaped JA4 profile |
+| `http.content_type contains "text/event-stream"` | Server-Sent Events streams (MCP Streamable HTTP transport) |
 | `!(ip.addr == <IP>) && (tcp.port == 443 \|\| quic)` | Encrypted traffic excluding a specific IP |
 
 ---
@@ -668,8 +901,8 @@ A quick reference of all display filters used throughout this project:
 | Component | Version | Purpose |
 |---|---|---|
 | **Ubuntu** | 24.04 LTS | Guest operating system (VirtualBox VM) |
-| **Wireshark** | 4.6.4 | GUI-based packet analysis |
-| **TShark** | 4.6.4 | CLI-based packet analysis & scripting |
+| **Wireshark** | 4.6.7 | GUI-based packet analysis |
+| **TShark** | 4.6.7 | CLI-based packet analysis & scripting |
 | **Firefox** | Latest | Traffic generation (HTTPS/QUIC) |
 | **JA4** | Built-in (Wireshark 4.2+) | TLS fingerprint generation |
 | **Sigma** | 2.0 | Portable detection rule format |
@@ -679,7 +912,7 @@ A quick reference of all display filters used throughout this project:
 
 ## 📚 Summary
 
-This project demonstrates practical, end-to-end network threat detection through seven progressive parts:
+This project demonstrates practical, end-to-end network threat detection through eight progressive parts:
 
 1. **Environment Setup** — Installed and configured Wireshark on Ubuntu 24.04 with least-privilege access through group-based permissions
 2. **Encrypted Traffic Analysis** — Captured and analyzed both traditional HTTPS (TLS over TCP) and modern QUIC/HTTP3 (TLS over UDP) traffic, understanding the security implications of each
@@ -687,11 +920,12 @@ This project demonstrates practical, end-to-end network threat detection through
 4. **TLS Fingerprinting** — Used JA4 fingerprints to classify TLS clients and detect unauthorized or malicious software on the network
 5. **C2 Beacon Detection** — Analyzed connection timing patterns to identify potential command-and-control beaconing behavior, including correlating traffic across multiple IPs for a single domain
 6. **Automated Analysis** — Built three TShark-based detection scripts (DNS tunneling, TLS extraction with SNI-less evasion detection, multi-IP jitter-based beacon analysis) with input validation, severity tiering, and analyst-ready output
-7. **Operationalizing the Detections** — Codified detections as portable Sigma rules, authored a SOC response playbook covering all four detections, and documented a worked dual-channel C2 investigation using the full toolkit end-to-end
+7. **Operationalizing the Detections** — Codified detections as portable Sigma rules, authored a SOC response playbook, and documented a worked dual-channel C2 investigation using the full toolkit end-to-end
+8. **Keeping Detections Current** — Conducted the July 2026 scheduled protocol review, deprecated a rule invalidated by Encrypted Client Hello and shipped its replacement, built an inverted post-quantum capability detection, added coverage for LLM and MCP egress, and put the whole rule set under CI validation
 
 ### Skills Demonstrated
 
-`Packet Analysis` · `Network Forensics` · `Threat Detection` · `TLS/SSL Analysis` · `DNS Security` · `Protocol Analysis` · `MITRE ATT&CK` · `Detection Engineering` · `Sigma Rules` · `SOC Playbooks` · `Incident Response` · `Linux Administration` · `Bash Scripting` · `QUIC/HTTP3` · `Security Automation`
+`Packet Analysis` · `Network Forensics` · `Threat Detection` · `TLS/SSL Analysis` · `DNS Security` · `Protocol Analysis` · `MITRE ATT&CK` · `Detection Engineering` · `Detection-as-Code` · `Sigma Rules` · `SOC Playbooks` · `Incident Response` · `Encrypted Client Hello` · `Post-Quantum TLS` · `AI/LLM Egress Security` · `CI/CD` · `Linux Administration` · `Bash Scripting` · `QUIC/HTTP3` · `Security Automation`
 
 ---
 

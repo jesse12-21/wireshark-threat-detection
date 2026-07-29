@@ -1,0 +1,107 @@
+title: ECH Client Hello Without Preceding DNS HTTPS-RR Lookup (Atomic)
+id: 7f0a1b2c-3d4e-4f50-8162-73849a5b6c7d
+status: experimental
+description: |
+    Atomic rule matching TLS Client Hello messages that carry a real (non-GREASE)
+    Encrypted Client Hello extension. Used as input to the correlation rule
+    below. On its own this event is entirely normal — the large majority of
+    modern browser traffic to CDN-fronted sites uses ECH.
+references:
+    - https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni
+author: jesse12-21
+date: 2026/07/29
+tags:
+    - attack.command_and_control
+    - attack.t1573.002
+logsource:
+    product: zeek
+    service: ssl
+detection:
+    ech_present:
+        # Zeek ssl.log with an ECH-aware analyzer populates this field with the
+        # ClientHelloOuter's ECH config_id. Environments running an older Zeek
+        # may instead need to match TLS extension type 65037 (0xFE0D) from a
+        # custom analyzer script — see detections/sigma/README.md.
+        ech_config_id|exists: true
+    condition: ech_present
+fields:
+    - id.orig_h
+    - id.resp_h
+    - server_name
+level: informational
+---
+title: ECH Connection Without Corresponding DNS HTTPS-RR Resolution
+id: 8a1b2c3d-4e5f-4061-8273-94a5b6c7d8e9
+status: experimental
+description: |
+    Detects a host establishing an ECH-protected TLS session without having
+    performed the DNS HTTPS resource record (type 65) lookup that supplies the
+    ECHConfig.
+
+    Detection logic: a conforming ECH client cannot encrypt its
+    ClientHelloInner without first obtaining the server's ECHConfig, which is
+    published in the HTTPS/SVCB DNS record for the target name. A client that
+    completes ECH with no preceding HTTPS-RR query therefore holds a hardcoded
+    or out-of-band ECHConfig. That is not a pattern any mainstream browser
+    produces, but it is exactly what an implant with an embedded config does —
+    and it survives the loss of SNI visibility that ECH otherwise imposes.
+
+    This rule replaces tls_no_sni_external.yml, which relied on SNI absence
+    being anomalous. Under ECH that assumption no longer holds.
+references:
+    - https://attack.mitre.org/techniques/T1573/002/
+    - https://attack.mitre.org/techniques/T1090/004/
+    - https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni
+    - https://github.com/jesse12-21/wireshark-threat-detection/blob/main/docs/refreshes/2026-07.md
+author: jesse12-21
+date: 2026/07/29
+tags:
+    - attack.command_and_control
+    - attack.t1573.002
+    - attack.defense_evasion
+    - attack.t1090.004
+correlation:
+    type: temporal_ordered
+    rules:
+        - dns_https_rr_query
+        - 7f0a1b2c-3d4e-4f50-8162-73849a5b6c7d
+    group-by:
+        - id.orig_h
+    timespan: 5m
+    # Alerting on the ABSENCE of the ordered pair requires backend support for
+    # negated temporal correlation. Backends without it should implement this
+    # as a scheduled search: ECH sessions LEFT JOIN HTTPS-RR queries on
+    # id.orig_h within the window, alerting where the join is empty. A worked
+    # SPL example is in detections/sigma/README.md.
+falsepositives:
+    - DNS caching — the HTTPS-RR lookup may fall outside the correlation window on long-lived hosts. Widen timespan or exclude hosts with recent cached lookups.
+    - Encrypted DNS (DoH/DoQ) hides the HTTPS-RR query from network visibility entirely. In DoH-heavy environments this rule requires resolver-log ingestion instead of passive DNS.
+    - Connection reuse and TLS session resumption across long sessions
+    - Some corporate proxies pre-resolve on the client's behalf
+level: high
+---
+title: DNS HTTPS Resource Record Query (Atomic)
+id: 9b2c3d4e-5f60-4172-9384-a5b6c7d8e9f0
+name: dns_https_rr_query
+status: experimental
+description: |
+    Atomic rule matching DNS queries for HTTPS resource records (type 65).
+    These records carry the ECHConfig used to encrypt a ClientHelloInner, along
+    with ALPN and IP hints. Referenced by the ECH correlation rule above.
+references:
+    - https://www.rfc-editor.org/rfc/rfc9460.html
+author: jesse12-21
+date: 2026/07/29
+tags:
+    - attack.command_and_control
+logsource:
+    product: zeek
+    service: dns
+detection:
+    https_rr:
+        qtype: 65
+    condition: https_rr
+fields:
+    - id.orig_h
+    - query
+level: informational

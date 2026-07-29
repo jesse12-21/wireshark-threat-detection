@@ -1,0 +1,120 @@
+title: Model Context Protocol Server Connection to External Host
+id: d6e7f809-1a2b-4c34-d5e6-f708192a3b4c
+status: experimental
+description: |
+    Detects HTTP traffic consistent with Model Context Protocol (MCP) client
+    sessions to hosts outside the organisation.
+
+    Background: MCP is the emerging standard for connecting AI assistants to
+    external tools and data sources. An MCP server exposes callable tools to a
+    model; connecting to an untrusted one grants that server influence over
+    what the assistant does with the data it can reach. Tooling vendors have
+    responded with pre-installation scanners for prompt injection and malicious
+    tool definitions, but those operate at the endpoint and supply-chain layer.
+    Network-layer visibility into which MCP servers hosts actually reach is a
+    separate and largely unmonitored control.
+
+    Detection logic targets the Streamable HTTP transport: POST to an MCP
+    endpoint path, or a Server-Sent Events stream negotiated on one. The stdio
+    transport is local-only and produces no network artifacts — this rule
+    cannot see it, which is an explicit coverage gap.
+references:
+    - https://attack.mitre.org/techniques/T1071/001/
+    - https://attack.mitre.org/techniques/T1219/
+    - https://github.com/jesse12-21/wireshark-threat-detection/blob/main/docs/refreshes/2026-07.md
+author: jesse12-21
+date: 2026/07/29
+tags:
+    - attack.command_and_control
+    - attack.t1071.001
+    - attack.t1219
+logsource:
+    product: zeek
+    service: http
+detection:
+    # Deliberately AND-only. An earlier draft used a single rule with an
+    # OR group across selections; the pySigma Splunk backend renders such
+    # groups without parentheses, and SPL's AND-before-OR precedence then
+    # silently changes the query's meaning. Splitting the observable into
+    # two AND-only rules avoids the problem and is cleaner besides — a POST
+    # to an MCP endpoint and an SSE stream are distinct observables that
+    # deserve separate verdicts. See docs/known-limitations.md.
+    mcp_post_request:
+        method: 'POST'
+        uri|contains:
+            - '/mcp'
+            - '/messages'
+            - 'jsonrpc'
+    internal_destinations:
+        id.resp_h|cidr:
+            - '10.0.0.0/8'
+            - '172.16.0.0/12'
+            - '192.168.0.0/16'
+            - '127.0.0.0/8'
+            - 'fc00::/7'
+    condition: mcp_post_request and not internal_destinations
+fields:
+    - id.orig_h
+    - id.resp_h
+    - id.resp_p
+    - host
+    - uri
+    - user_agent
+falsepositives:
+    - Sanctioned MCP integrations — build an allowlist of approved servers, then treat this rule as detecting deviations from it
+    - Non-MCP applications using /sse or /messages endpoints for unrelated Server-Sent Events or messaging features. The path patterns are generic; validate with the JSON-RPC indicator or user agent before escalating.
+    - Development and testing against local or staging MCP servers reached over a VPN
+    - Note: TLS-wrapped MCP over HTTPS is not visible to this rule without decryption. Where TLS terminates at a proxy, run this against proxy logs instead.
+level: medium
+---
+title: Server-Sent Events Stream to External Host (MCP Transport)
+id: e7f80910-2a3b-4c45-9e6f-08192a3b4c5d
+status: experimental
+description: |
+    Detects Server-Sent Events streams to external hosts. SSE is the response
+    half of the MCP Streamable HTTP transport, and a long-lived SSE stream to
+    an unattributable external host is the most durable network observable an
+    MCP session produces.
+
+    Companion to mcp_server_connection.yml. The two are kept as separate
+    AND-only rules rather than one rule with an OR group — see
+    docs/known-limitations.md for why.
+
+    SSE is not exclusive to MCP; chat interfaces, log tailers, and live
+    dashboards all use it. Correlate with the POST rule above or with the
+    client user agent before treating a hit as an MCP session.
+references:
+    - https://attack.mitre.org/techniques/T1071/001/
+    - https://attack.mitre.org/techniques/T1219/
+    - https://github.com/jesse12-21/wireshark-threat-detection/blob/main/docs/refreshes/2026-07.md
+author: jesse12-21
+date: 2026/07/29
+tags:
+    - attack.command_and_control
+    - attack.t1071.001
+    - attack.t1219
+logsource:
+    product: zeek
+    service: http
+detection:
+    sse_stream:
+        resp_mime_types|contains: 'text/event-stream'
+    internal_destinations:
+        id.resp_h|cidr:
+            - '10.0.0.0/8'
+            - '172.16.0.0/12'
+            - '192.168.0.0/16'
+            - '127.0.0.0/8'
+            - 'fc00::/7'
+    condition: sse_stream and not internal_destinations
+fields:
+    - id.orig_h
+    - id.resp_h
+    - host
+    - uri
+    - user_agent
+falsepositives:
+    - Chat and messaging web applications
+    - Live dashboards, log tailers, and CI build-output streams
+    - Any application using SSE for push notifications
+level: low

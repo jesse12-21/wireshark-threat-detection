@@ -1,0 +1,5 @@
+# False positive: X25519MLKEM768 is the IANA-registered name for TLS
+# supported group 4588 (0x11EC), a public standard identifier defined in
+# draft-ietf-tls-ecdhe-mlkem. Gitleaks' generic-api-key heuristic matches it
+# because the line reads "key shares by default: <token>". Not a credential.
+detections/sigma/tls_missing_pq_keyshare.yml:generic-api-key:13

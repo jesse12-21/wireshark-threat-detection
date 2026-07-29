@@ -1,0 +1,93 @@
+title: LLM API Egress from Unsanctioned Host (Atomic)
+id: b4c5d6e7-f809-4a12-b3c4-d5e6f7081920
+status: experimental
+description: |
+    Atomic rule matching outbound TLS sessions to known large-language-model
+    inference API endpoints. Referenced by the volume correlation rule below
+    and useful on its own for shadow-AI inventory.
+
+    Scope note: the presence of LLM API traffic is not itself malicious. Most
+    organisations now have sanctioned AI tooling. The security questions are
+    which hosts are talking to which providers, whether those providers are
+    approved, and how much data is leaving in the request direction.
+references:
+    - https://attack.mitre.org/techniques/T1567/
+author: jesse12-21
+date: 2026/07/29
+tags:
+    - attack.exfiltration
+    - attack.t1567
+logsource:
+    product: zeek
+    service: ssl
+detection:
+    llm_endpoints:
+        server_name:
+            - 'api.openai.com'
+            - 'api.anthropic.com'
+            - 'generativelanguage.googleapis.com'
+            - 'api.mistral.ai'
+            - 'api.cohere.ai'
+            - 'api.together.xyz'
+            - 'api.groq.com'
+            - 'api.deepseek.com'
+            - 'api.x.ai'
+        # Regional and self-hosted inference endpoints vary by environment.
+        # Extend this list from your own egress baseline rather than treating
+        # it as complete.
+    sanctioned_hosts:
+        # Replace with the CIDR or host list approved for AI tooling in your
+        # environment. An empty allowlist makes every LLM session an event.
+        id.orig_h|cidr:
+            - '10.20.30.0/24'
+    condition: llm_endpoints and not sanctioned_hosts
+fields:
+    - id.orig_h
+    - id.resp_h
+    - server_name
+level: low
+---
+title: High-Volume Upload to LLM Inference API
+id: c5d6e7f8-091a-4b23-c4d5-e6f708192a3b
+status: experimental
+description: |
+    Detects sustained high request-direction byte volume from a single host to
+    LLM inference APIs — a pattern consistent with bulk document or source-code
+    submission rather than interactive prompting.
+
+    Why this matters: the prompt field is an unmonitored egress channel. A user
+    or implant can paste an entire customer database, private repository, or
+    credential store into a request body, and to conventional DLP it is
+    indistinguishable from an ordinary HTTPS POST. Volume in the originator
+    direction is the strongest signal available without content inspection.
+
+    Threshold guidance: interactive chat traffic typically produces tens of
+    kilobytes per session in the request direction. The 10 MB / 30 min default
+    below is set well above that; tune from your own baseline, and expect
+    legitimate highs from developer tooling and agentic coding assistants.
+references:
+    - https://attack.mitre.org/techniques/T1567/
+    - https://attack.mitre.org/techniques/T1048/
+    - https://github.com/jesse12-21/wireshark-threat-detection/blob/main/docs/refreshes/2026-07.md
+author: jesse12-21
+date: 2026/07/29
+tags:
+    - attack.exfiltration
+    - attack.t1567
+    - attack.t1048
+correlation:
+    type: value_count
+    rules:
+        - b4c5d6e7-f809-4a12-b3c4-d5e6f7081920
+    group-by:
+        - id.orig_h
+    timespan: 30m
+    condition:
+        gte: 10485760
+        field: orig_bytes
+falsepositives:
+    - Agentic coding assistants submitting large repository context — now a routine developer workflow and the dominant expected FP
+    - Document-analysis and summarisation workloads on sanctioned hosts
+    - Retrieval-augmented generation pipelines performing bulk embedding
+    - Fine-tuning dataset uploads
+level: medium

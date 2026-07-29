@@ -1,0 +1,77 @@
+title: Browser-Fingerprinted Client Missing Post-Quantum Key Share
+id: a3b4c5d6-e7f8-4901-a2b3-c4d5e6f70819
+status: experimental
+description: |
+    Detects TLS 1.3 clients whose JA4 fingerprint claims a mainstream browser
+    identity but whose supported_groups extension omits the hybrid
+    post-quantum group X25519MLKEM768 (IANA 4588 / 0x11EC).
+
+    Rationale — an inverted signal. Through 2025-2026 hybrid ML-KEM key
+    agreement moved from experiment to default across Chrome, Firefox, and the
+    major CDNs; roughly half of measured public domains now negotiate it, and
+    X25519MLKEM768 is the group those clients present. Mainstream browsers send
+    two key shares by default: X25519MLKEM768 and X25519.
+
+    Malware TLS stacks lag. Implants built on older static-linked OpenSSL,
+    bespoke TLS implementations, or Go/Python runtimes pinned to pre-3.5
+    OpenSSL cannot offer PQ groups. When such a client also spoofs a browser
+    JA4 to blend in, the missing PQ key share exposes the mismatch: the
+    fingerprint claims Chrome, the cryptographic capability says otherwise.
+
+    This detection improves as PQ adoption rises, which is the opposite of the
+    usual decay curve for TLS detections.
+references:
+    - https://attack.mitre.org/techniques/T1573/002/
+    - https://attack.mitre.org/techniques/T1036/
+    - https://datatracker.ietf.org/doc/html/draft-ietf-tls-ecdhe-mlkem
+    - https://github.com/jesse12-21/wireshark-threat-detection/blob/main/docs/refreshes/2026-07.md
+author: jesse12-21
+date: 2026/07/29
+tags:
+    - attack.command_and_control
+    - attack.t1573.002
+    - attack.defense_evasion
+    - attack.t1036
+logsource:
+    product: zeek
+    service: ssl
+detection:
+    tls13_session:
+        version: 'TLSv13'
+    claims_browser_ja4:
+        # Populate from your environment's observed browser JA4 baseline.
+        # These are structural placeholders — replace with fingerprints
+        # inventoried from known-good hosts before deploying.
+        ja4|startswith:
+            - 't13d15'   # common Chrome/Edge Client Hello shape
+            - 't13d16'   # common Firefox Client Hello shape
+    offers_pq_group:
+        # 4588 = X25519MLKEM768. 4587 / 4589 are the secp256r1 and secp384r1
+        # hybrids. 25497 is the obsolete pre-standard X25519Kyber768Draft00,
+        # accepted here so that merely-outdated clients are not flagged.
+        supported_groups|contains:
+            - '4588'
+            - '4587'
+            - '4589'
+            - '25497'
+    internal_destinations:
+        id.resp_h|cidr:
+            - '10.0.0.0/8'
+            - '172.16.0.0/12'
+            - '192.168.0.0/16'
+            - '127.0.0.0/8'
+            - 'fc00::/7'
+    condition: tls13_session and claims_browser_ja4 and not offers_pq_group and not internal_destinations
+fields:
+    - id.orig_h
+    - id.resp_h
+    - ja4
+    - server_name
+    - supported_groups
+falsepositives:
+    - Genuinely outdated but legitimate browsers on unpatched or EOL endpoints — verify against asset inventory and patch status before escalating
+    - Enterprise TLS-inspection proxies that rewrite the Client Hello and strip PQ groups. This is the single largest expected FP source; exclude proxy egress IPs.
+    - Browser automation frameworks (Selenium, Playwright) bundling older TLS stacks
+    - Embedded browser engines in desktop applications
+    - FIPS-constrained environments restricted to approved classical groups
+level: medium

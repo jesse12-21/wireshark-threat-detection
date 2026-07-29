@@ -1,0 +1,139 @@
+name: Validate Detections
+
+# Detection-as-code: every rule and script is validated on push and on pull
+# request, so a syntactically broken or duplicated detection cannot reach main.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'detections/**'
+      - 'scripts/**'
+      - '.github/workflows/validate-detections.yml'
+  pull_request:
+    paths:
+      - 'detections/**'
+      - 'scripts/**'
+  workflow_dispatch:
+
+jobs:
+  sigma:
+    name: Sigma rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install sigma-cli and backends
+        run: |
+          python -m pip install --upgrade pip
+          pip install sigma-cli pysigma-backend-splunk pysigma-backend-elasticsearch pyyaml
+
+      - name: YAML syntax
+        run: |
+          fail=0
+          for f in detections/sigma/*.yml; do
+            if python -c "import yaml,sys; list(yaml.safe_load_all(open(sys.argv[1])))" "$f"; then
+              echo "  ok    $f"
+            else
+              echo "  FAIL  $f"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Sigma rule validation
+        run: sigma check detections/sigma/
+
+      - name: Unique rule IDs
+        run: |
+          # A duplicated UUID silently breaks correlation references, so this
+          # is checked explicitly rather than relying on sigma check.
+          ids=$(grep -rhoP '^id:\s*\K\S+' detections/sigma/*.yml | sort)
+          dupes=$(echo "$ids" | uniq -d)
+          if [ -n "$dupes" ]; then
+            echo "Duplicate rule IDs found:"
+            echo "$dupes"
+            exit 1
+          fi
+          echo "$(echo "$ids" | wc -l) rule IDs, all unique."
+
+      - name: Backend conversion smoke test
+        run: |
+          # Verifies rules compile to a backend query. --without-pipeline is
+          # used deliberately: there is no published Zeek pipeline plugin, so
+          # field mapping is environment-specific and applied at deploy time.
+          # Deprecated rules and Sigma 2.0 correlations are excluded — the
+          # former are retained for provenance only, the latter are not yet
+          # convertible on all backends.
+          for f in detections/sigma/*.yml; do
+            if grep -q '^status: deprecated' "$f"; then
+              echo "  skip (deprecated)  $f"
+              continue
+            fi
+            if grep -q '^correlation:' "$f"; then
+              echo "  skip (correlation) $f"
+              continue
+            fi
+            sigma convert -t splunk --without-pipeline "$f" > /dev/null && echo "  ok    $f"
+          done
+
+  scripts:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Syntax check
+        run: |
+          for f in scripts/*.sh; do
+            bash -n "$f" && echo "  ok    $f"
+          done
+
+      - name: ShellCheck
+        run: shellcheck --severity=warning scripts/*.sh
+
+      - name: Executable bit
+        run: |
+          fail=0
+          for f in scripts/*.sh; do
+            if [ ! -x "$f" ]; then
+              echo "  FAIL  $f is not executable (git update-index --chmod=+x $f)"
+              fail=1
+            else
+              echo "  ok    $f"
+            fi
+          done
+          exit $fail
+
+  hygiene:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No unresolved placeholders
+        run: |
+          # Catches template text that would otherwise ship to a reviewer.
+          # .github is excluded so this step does not match its own patterns.
+          if grep -rn --include='*.md' --include='*.yml' --include='*.sh' \
+             --exclude-dir='.github' \
+             -e '\[last name\]' -e 'TODO:' -e 'FIXME' -e 'REPLACE_ME' . ; then
+            echo "Unresolved placeholder found."
+            exit 1
+          fi
+          echo "No placeholders found."
+
+      - name: No committed capture files
+        run: |
+          # .gitignore excludes these; this asserts the exclusion held.
+          if find . -name '*.pcap' -o -name '*.pcapng' | grep -q .; then
+            echo "Capture file committed to repository."
+            exit 1
+          fi
+          echo "No capture files committed."

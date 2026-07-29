@@ -1,19 +1,37 @@
 title: TLS Client Hello Without SNI to External Destination
 id: 4d5e6f78-9ab0-4c1d-9e2f-3a4b5c6d7e81
-status: experimental
+status: deprecated
 description: |
-    Detects TLS Client Hello messages lacking the Server Name Indication
-    (SNI) extension when the destination is an external (non-RFC1918) IP.
-    Legitimate clients almost universally include SNI; its absence often
-    indicates malware connecting to a hardcoded C2 IP, or deliberate SNI
-    stripping for evasion of hostname-based inspection. This is one of
-    the highest-signal-to-noise TLS detections available without payload
-    inspection.
+    DEPRECATED 2026-07-29. Superseded by tls_ech_without_dns_config.yml
+    (id: 8a1b2c3d-4e5f-4061-8273-94a5b6c7d8e9).
+
+    Original intent: detect TLS Client Hello messages lacking the Server Name
+    Indication (SNI) extension to external destinations, on the assumption that
+    legitimate clients universally send SNI and that its absence indicates
+    malware connecting to a hardcoded C2 IP, or deliberate SNI stripping.
+
+    Why deprecated: Encrypted Client Hello (ECH) invalidates the core
+    assumption. Under ECH the visible ClientHelloOuter carries a generic
+    "cover" SNI (typically the ECH provider's public name) while the real
+    destination sits in the encrypted ClientHelloInner. Separately, GREASE ECH
+    causes browsers to emit an ECH-shaped extension on effectively every
+    ClientHello, so neither SNI absence nor ECH presence is anomalous on its
+    own. Retaining this rule as written produces rising false positives against
+    legitimate privacy-preserving traffic while failing to detect adversaries
+    using the same mechanism.
+
+    Migration: deploy tls_ech_without_dns_config.yml, which keys on a DNS-layer
+    precondition that hardcoded-config ECH clients cannot satisfy. In
+    environments with no measurable ECH adoption this rule may still run in
+    alert-only mode during transition, but treat verdicts as low confidence and
+    plan removal.
 references:
     - https://attack.mitre.org/techniques/T1573/002/
-    - https://github.com/jesse12-21/wireshark-threat-detection
+    - https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni
+    - https://github.com/jesse12-21/wireshark-threat-detection/blob/main/docs/refreshes/2026-07.md
 author: jesse12-21
 date: 2026/05/15
+modified: 2026/07/29
 tags:
     - attack.command_and_control
     - attack.t1573.002
@@ -23,8 +41,6 @@ logsource:
     service: ssl
 detection:
     no_sni:
-        # In Zeek's ssl.log, server_name is empty ("-" in TSV) when SNI is absent.
-        # Both forms covered for portability.
         server_name|exists: false
     internal_destinations:
         id.resp_h|cidr:
@@ -42,8 +58,8 @@ fields:
     - id.resp_p
     - version
 falsepositives:
+    - ECH-enabled browser traffic (expected to dominate this rule's output over time)
     - Legacy IoT devices using direct-IP TLS to vendor backends
-    - Some VPN client bootstrap traffic (often connecting by IP)
-    - Active external probes / scanners (Censys, Shodan) hitting internal-facing services
-    - Older software that pre-dates widespread SNI support
-level: high
+    - Some VPN client bootstrap traffic
+    - External scanners probing internal-facing services
+level: informational
